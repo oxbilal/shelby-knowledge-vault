@@ -7,10 +7,11 @@ import { ArrowLeft, DatabaseZap, FileText, Search } from "lucide-react";
 import { ActivityTimeline, type ActivityEvent } from "@/components/dashboard/activity-timeline";
 import { AIPanel, type ChatMessage } from "@/components/dashboard/ai-panel";
 import { FileCard } from "@/components/dashboard/file-card";
+import { HeaderWalletConnect } from "@/components/dashboard/wallet-connect";
+import { OnchainActivityCard } from "@/components/dashboard/onchain-activity-card";
 import { PreviewDialog } from "@/components/dashboard/preview-dialog";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { UploadZone } from "@/components/dashboard/upload-zone";
-import { WalletCard } from "@/components/dashboard/wallet-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -244,7 +245,7 @@ export function VaultDashboard() {
   return (
     <main className="min-h-screen">
       <div className="border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto grid h-16 max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
               <DatabaseZap className="size-5" />
@@ -253,12 +254,15 @@ export function VaultDashboard() {
               <p className="text-sm font-semibold text-white">Shelby Knowledge Vault</p>
             </div>
           </div>
-          <Button asChild variant="ghost">
+          <Button asChild variant="ghost" size="sm" className="justify-self-center">
             <Link href="/">
               <ArrowLeft />
               Home
             </Link>
           </Button>
+          <div className="justify-self-end">
+            <HeaderWalletConnect />
+          </div>
         </div>
       </div>
 
@@ -282,7 +286,7 @@ export function VaultDashboard() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_350px]">
           <div className="space-y-4">
             <StatsCards filesStored={files.length} fastReads={fastReads} aiQueries={aiQueries} />
-            <WalletCard />
+            <OnchainActivityCard />
             <UploadZone onFiles={handleUpload} isUploading={isUploading} />
 
             <section>
