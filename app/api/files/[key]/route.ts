@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { deleteLocalShelbyObject, getLocalShelbyObject } from "@/lib/shelby-local";
 import { deleteShelbyObject, getShelbyObject, isShelbyS3Configured } from "@/lib/shelby-s3";
 
 export const runtime = "nodejs";
@@ -14,19 +15,34 @@ function contentDisposition(fileName: string) {
   return `inline; filename="${safeName}"`;
 }
 
-export async function GET(_request: Request, context: FileRouteContext) {
-  if (!isShelbyS3Configured()) {
-    return NextResponse.json({ mode: "local" }, { status: 503 });
-  }
+function bytesToArrayBuffer(bytes: Uint8Array) {
+  const body = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(body).set(bytes);
+  return body;
+}
 
+export async function GET(_request: Request, context: FileRouteContext) {
   const { key } = await context.params;
+
+  if (!isShelbyS3Configured()) {
+    const object = getLocalShelbyObject(key);
+    if (!object) {
+      return NextResponse.json({ error: "Local file not found" }, { status: 404 });
+    }
+
+    return new Response(bytesToArrayBuffer(object.body), {
+      headers: {
+        "Content-Type": object.contentType,
+        "Content-Disposition": contentDisposition(object.fileName),
+        "Cache-Control": "private, max-age=60",
+      },
+    });
+  }
 
   try {
     const object = await getShelbyObject(key);
-    const body = new ArrayBuffer(object.body.byteLength);
-    new Uint8Array(body).set(object.body);
 
-    return new Response(body, {
+    return new Response(bytesToArrayBuffer(object.body), {
       headers: {
         "Content-Type": object.contentType,
         "Content-Disposition": contentDisposition(object.fileName),
@@ -39,11 +55,12 @@ export async function GET(_request: Request, context: FileRouteContext) {
 }
 
 export async function DELETE(_request: Request, context: FileRouteContext) {
-  if (!isShelbyS3Configured()) {
-    return NextResponse.json({ mode: "local" }, { status: 503 });
-  }
-
   const { key } = await context.params;
+
+  if (!isShelbyS3Configured()) {
+    deleteLocalShelbyObject(key);
+    return NextResponse.json({ mode: "local", ok: true });
+  }
 
   try {
     await deleteShelbyObject(key);

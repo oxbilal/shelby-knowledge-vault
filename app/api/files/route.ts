@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { listLocalShelbyObjects } from "@/lib/shelby-local";
 import { isShelbyS3Configured, listShelbyObjects } from "@/lib/shelby-s3";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   if (!isShelbyS3Configured()) {
-    return NextResponse.json({ mode: "local", files: [] }, { status: 503 });
+    return NextResponse.json({ mode: "local", files: listLocalShelbyObjects() });
   }
 
   try {

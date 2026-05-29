@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
+import { uploadLocalShelbyObject } from "@/lib/shelby-local";
 import { isShelbyS3Configured, uploadShelbyObject } from "@/lib/shelby-s3";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (!isShelbyS3Configured()) {
-    return NextResponse.json({ mode: "local" }, { status: 503 });
-  }
-
   const formData = await request.formData();
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Missing file" }, { status: 400 });
+  }
+
+  if (!isShelbyS3Configured()) {
+    const localFile = await uploadLocalShelbyObject(file);
+    return NextResponse.json({ mode: "local", file: localFile });
   }
 
   try {
