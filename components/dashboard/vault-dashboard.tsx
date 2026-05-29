@@ -23,7 +23,7 @@ import {
   uploadToShelby,
   type ShelbyFile,
 } from "@/lib/shelby";
-import { askFileQuestion, getAIMode, type AIMode } from "@/lib/ai";
+import { askFileQuestion, type AIMode } from "@/lib/ai";
 import { cn } from "@/lib/utils";
 
 type PreviewState = {
@@ -101,12 +101,7 @@ export function VaultDashboard() {
 
   useEffect(() => {
     void refreshFiles();
-    void refreshAIMode();
   }, []);
-
-  async function refreshAIMode() {
-    setAiMode(await getAIMode());
-  }
 
   async function refreshFiles() {
     const nextFiles = await listShelbyFiles();

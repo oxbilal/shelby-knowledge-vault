@@ -63,5 +63,10 @@ export async function askGeminiQuestion(input: GeminiAskInput): Promise<string> 
     },
   });
 
-  return response.text?.trim() || GEMINI_PREVIEW_ANSWER;
+  const answer = response.text?.trim();
+  if (!answer) {
+    throw new Error("Gemini response was empty");
+  }
+
+  return answer;
 }

@@ -12,24 +12,6 @@ function normalizeMode(mode?: string): AIMode {
   return mode === "gemini" ? "Gemini" : "Preview";
 }
 
-export async function getAIMode(): Promise<AIMode> {
-  try {
-    const response = await fetch("/api/ai/ask", {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    if (response.ok) {
-      const payload = (await response.json()) as AskAIResponse;
-      return normalizeMode(payload.mode);
-    }
-  } catch {
-    return "Preview";
-  }
-
-  return "Preview";
-}
-
 export async function askFileQuestion(
   fileName: string,
   question: string,

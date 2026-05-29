@@ -32,15 +32,15 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown Gemini request error";
 }
 
-function getMode() {
-  return isGeminiConfigured() ? "gemini" : "preview";
-}
+function logAIStatus(args: { mode: "gemini" | "preview"; geminiSuccess: boolean; error?: unknown }) {
+  console.info("[api/ai/ask] AI mode", { mode: args.mode });
+  console.info("[api/ai/ask] Gemini success", { success: args.geminiSuccess });
 
-export async function GET() {
-  const hasGeminiKey = isGeminiConfigured();
-  console.info("[api/ai/ask] hasGeminiKey", { hasGeminiKey });
-
-  return NextResponse.json({ mode: getMode() });
+  if (args.error) {
+    console.error("[api/ai/ask] Gemini error", {
+      message: getErrorMessage(args.error),
+    });
+  }
 }
 
 export async function POST(request: Request) {
@@ -60,18 +60,16 @@ export async function POST(request: Request) {
   }
 
   if (!hasGeminiKey) {
+    logAIStatus({ mode: "preview", geminiSuccess: false });
     return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
   }
 
   try {
     const answer = await askGeminiQuestion(input);
-    console.info("[api/ai/ask] Gemini request success");
+    logAIStatus({ mode: "gemini", geminiSuccess: true });
     return NextResponse.json({ answer, mode: "gemini" });
   } catch (error) {
-    console.error("[api/ai/ask] Gemini request failure", {
-      message: getErrorMessage(error),
-    });
-
+    logAIStatus({ mode: "preview", geminiSuccess: false, error });
     return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
   }
 }
