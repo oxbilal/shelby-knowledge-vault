@@ -224,7 +224,7 @@ export function VaultDashboard() {
     setIsAsking(true);
 
     try {
-      const answer = await askFileQuestion(selectedFile.id, question);
+      const answer = await askFileQuestion(selectedFile.name, question);
       const assistantMessage: ChatMessage = {
         id: createId("assistant"),
         sender: "assistant",

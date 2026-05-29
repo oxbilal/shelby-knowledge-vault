@@ -40,6 +40,12 @@ For Shelby S3-compatible storage, set:
 
 If these values are missing, the app uses local preview mode.
 
+For Gemini answers, set:
+
+- `GEMINI_API_KEY`
+
+If this value is missing, Ask AI uses the preview fallback.
+
 On locked-down Windows PowerShell sessions, use:
 
 ```bash
@@ -66,19 +72,21 @@ npm run build
 - `app/dashboard/page.tsx`: dashboard route
 - `components/`: reusable UI and dashboard components
 - `app/api/files/*`: Shelby S3-compatible file API routes
+- `app/api/ai/ask`: Gemini answer API route
 - `lib/shelby.ts`: client file helpers with local fallback
 - `lib/shelby-s3.ts`: server-side S3 client helpers
-- `lib/ai.ts`: mock AI question function
+- `lib/gemini.ts`: server-side Gemini helper
+- `lib/ai.ts`: client Ask AI helper
 
 Integration TODOs are marked in code:
 
 - Shelby S3 Gateway
-- Gemini API
+- File text extraction for Gemini grounding
 
 ## Roadmap
 
 - Shelby S3 Gateway production settings
-- Gemini API integration
+- Gemini file-text grounding
 - File text extraction
 - File citations
 - Persistent metadata
