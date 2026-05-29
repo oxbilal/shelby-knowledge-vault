@@ -11,6 +11,14 @@ export type ShelbyFile = {
 
 const SHELBY_STORAGE_KEY = "shelby-knowledge-vault-files";
 
+type ShelbyFilesResponse = {
+  files?: ShelbyFile[];
+};
+
+type ShelbyUploadResponse = {
+  file?: ShelbyFile;
+};
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -58,10 +66,15 @@ function createId() {
   return `shelby-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export async function uploadToShelby(file: File): Promise<ShelbyFile> {
-  // TODO: Replace this localStorage mock with Shelby S3 Gateway upload logic.
-  // Expected real flow: request/create bucket credentials, upload the file object,
-  // persist returned object metadata, and use Shelby hot storage URLs for reads.
+function isLocalModeStatus(status: number) {
+  return status === 404 || status === 503;
+}
+
+function findLocalFile(id: string) {
+  return readFiles().find((file) => file.id === id);
+}
+
+async function uploadToLocalShelby(file: File): Promise<ShelbyFile> {
   const dataUrl = await fileToDataUrl(file);
   const shelbyFile: ShelbyFile = {
     id: createId(),
@@ -80,13 +93,11 @@ export async function uploadToShelby(file: File): Promise<ShelbyFile> {
   return shelbyFile;
 }
 
-export async function listShelbyFiles(): Promise<ShelbyFile[]> {
-  // TODO: Replace this with Shelby S3 Gateway object listing.
+async function listLocalShelbyFiles(): Promise<ShelbyFile[]> {
   return readFiles();
 }
 
-export async function getShelbyFileUrl(id: string): Promise<string> {
-  // TODO: Replace this with a Shelby S3 Gateway signed URL or public read URL.
+async function getLocalShelbyFileUrl(id: string): Promise<string> {
   const files = readFiles();
   const nextFiles = files.map((file) =>
     file.id === id ? { ...file, readCount: file.readCount + 1 } : file,
@@ -101,10 +112,88 @@ export async function getShelbyFileUrl(id: string): Promise<string> {
   return match.dataUrl;
 }
 
-export async function deleteShelbyFile(id: string): Promise<void> {
-  // TODO: Replace this with Shelby S3 Gateway object deletion.
+async function deleteLocalShelbyFile(id: string): Promise<void> {
   const files = readFiles().filter((file) => file.id !== id);
   writeFiles(files);
+}
+
+export async function uploadToShelby(file: File): Promise<ShelbyFile> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await fetch("/api/files/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (response.ok) {
+      const payload = (await response.json()) as ShelbyUploadResponse;
+      if (payload.file) {
+        return payload.file;
+      }
+    }
+
+    if (!isLocalModeStatus(response.status)) {
+      console.warn("Shelby S3 upload failed; using local preview mode.");
+    }
+  } catch {
+    console.warn("Shelby S3 upload unavailable; using local preview mode.");
+  }
+
+  return uploadToLocalShelby(file);
+}
+
+export async function listShelbyFiles(): Promise<ShelbyFile[]> {
+  try {
+    const response = await fetch("/api/files", {
+      method: "GET",
+      cache: "no-store",
+    });
+
+    if (response.ok) {
+      const payload = (await response.json()) as ShelbyFilesResponse;
+      return payload.files ?? [];
+    }
+
+    if (!isLocalModeStatus(response.status)) {
+      console.warn("Shelby S3 list failed; using local preview mode.");
+    }
+  } catch {
+    console.warn("Shelby S3 list unavailable; using local preview mode.");
+  }
+
+  return listLocalShelbyFiles();
+}
+
+export async function getShelbyFileUrl(id: string): Promise<string> {
+  if (findLocalFile(id)) {
+    return getLocalShelbyFileUrl(id);
+  }
+
+  return `/api/files/${encodeURIComponent(id)}`;
+}
+
+export async function deleteShelbyFile(id: string): Promise<void> {
+  if (findLocalFile(id)) {
+    await deleteLocalShelbyFile(id);
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+
+    if (response.ok || isLocalModeStatus(response.status)) {
+      return;
+    }
+  } catch {
+    console.warn("Shelby S3 delete unavailable.");
+    return;
+  }
+
+  throw new Error("Shelby file delete failed");
 }
 
 export function formatFileSize(bytes: number) {
