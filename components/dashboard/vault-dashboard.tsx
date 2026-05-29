@@ -10,6 +10,7 @@ import { FileCard } from "@/components/dashboard/file-card";
 import { PreviewDialog } from "@/components/dashboard/preview-dialog";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { UploadZone } from "@/components/dashboard/upload-zone";
+import { WalletCard } from "@/components/dashboard/wallet-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -281,6 +282,7 @@ export function VaultDashboard() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_350px]">
           <div className="space-y-4">
             <StatsCards filesStored={files.length} fastReads={fastReads} aiQueries={aiQueries} />
+            <WalletCard />
             <UploadZone onFiles={handleUpload} isUploading={isUploading} />
 
             <section>

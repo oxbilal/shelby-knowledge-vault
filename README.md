@@ -72,3 +72,6 @@ Integration TODOs are marked in code:
 - File citations
 - Persistent metadata
 - Authentication
+- Wallet connection
+- Onchain access logs
+- Ownership and permission records
