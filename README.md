@@ -29,6 +29,8 @@ npm install
 npm run dev
 ```
 
+Use `.env.example` as the environment variable template.
+
 On locked-down Windows PowerShell sessions, use:
 
 ```bash
