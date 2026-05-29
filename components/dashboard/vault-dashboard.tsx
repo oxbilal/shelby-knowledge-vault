@@ -23,7 +23,7 @@ import {
   uploadToShelby,
   type ShelbyFile,
 } from "@/lib/shelby";
-import { askFileQuestion } from "@/lib/ai";
+import { askFileQuestion, getAIMode, type AIMode } from "@/lib/ai";
 import { cn } from "@/lib/utils";
 
 type PreviewState = {
@@ -77,6 +77,7 @@ export function VaultDashboard() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [aiQueries, setAiQueries] = useState(0);
+  const [aiMode, setAiMode] = useState<AIMode>("Preview");
   const [preview, setPreview] = useState<PreviewState>();
 
   const selectedFile = useMemo(
@@ -100,7 +101,12 @@ export function VaultDashboard() {
 
   useEffect(() => {
     void refreshFiles();
+    void refreshAIMode();
   }, []);
+
+  async function refreshAIMode() {
+    setAiMode(await getAIMode());
+  }
 
   async function refreshFiles() {
     const nextFiles = await listShelbyFiles();
@@ -224,11 +230,12 @@ export function VaultDashboard() {
     setIsAsking(true);
 
     try {
-      const answer = await askFileQuestion(selectedFile.name, question);
+      const result = await askFileQuestion(selectedFile.name, question);
+      setAiMode(result.mode);
       const assistantMessage: ChatMessage = {
         id: createId("assistant"),
         sender: "assistant",
-        content: answer,
+        content: result.answer,
       };
       setMessages((current) => [...current, assistantMessage]);
       setAiQueries((current) => current + 1);
@@ -373,6 +380,7 @@ export function VaultDashboard() {
           <div className="space-y-4 xl:sticky xl:top-20 xl:self-start">
             <AIPanel
               selectedFile={selectedFile}
+              aiMode={aiMode}
               messages={messages}
               isAsking={isAsking}
               onAsk={handleAsk}

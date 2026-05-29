@@ -2,9 +2,11 @@
 
 import { FormEvent, useState } from "react";
 import { Bot, Loader2, MessageSquare, Send } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { type AIMode } from "@/lib/ai";
 import { type ShelbyFile } from "@/lib/shelby";
 import { cn } from "@/lib/utils";
 
@@ -16,12 +18,13 @@ export type ChatMessage = {
 
 type AIPanelProps = {
   selectedFile?: ShelbyFile;
+  aiMode: AIMode;
   messages: ChatMessage[];
   isAsking: boolean;
   onAsk: (question: string) => Promise<void>;
 };
 
-export function AIPanel({ selectedFile, messages, isAsking, onAsk }: AIPanelProps) {
+export function AIPanel({ selectedFile, aiMode, messages, isAsking, onAsk }: AIPanelProps) {
   const [question, setQuestion] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -45,8 +48,13 @@ export function AIPanel({ selectedFile, messages, isAsking, onAsk }: AIPanelProp
               {selectedFile ? selectedFile.name : "No file selected"}
             </p>
           </div>
-          <div className="flex size-9 items-center justify-center rounded-md bg-secondary/15 text-secondary">
-            <Bot className="size-4" />
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex size-9 items-center justify-center rounded-md bg-secondary/15 text-secondary">
+              <Bot className="size-4" />
+            </div>
+            <Badge variant="outline" className="border-secondary/20 text-[11px] text-slate-300">
+              AI mode: {aiMode}
+            </Badge>
           </div>
         </div>
       </div>
