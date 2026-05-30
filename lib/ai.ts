@@ -1,7 +1,7 @@
 const AI_PREVIEW_ANSWER =
   "Based on the selected file, this preview answer will be replaced by the real AI integration.";
 
-export type AIMode = "Gemini" | "Preview";
+export type AIMode = "OpenAI" | "Gemini" | "Preview";
 
 type AskAIResponse = {
   answer?: string;
@@ -9,6 +9,10 @@ type AskAIResponse = {
 };
 
 function normalizeMode(mode?: string): AIMode {
+  if (mode === "openai") {
+    return "OpenAI";
+  }
+
   return mode === "gemini" ? "Gemini" : "Preview";
 }
 

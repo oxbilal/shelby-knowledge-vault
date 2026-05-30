@@ -3,16 +3,28 @@ import {
   askGeminiQuestion,
   GEMINI_PREVIEW_ANSWER,
   isGeminiConfigured,
-  type GeminiAskInput,
 } from "@/lib/gemini";
+import {
+  askOpenAIQuestion,
+  isOpenAIConfigured,
+  isOpenAIProviderSelected,
+} from "@/lib/openai";
 
 export const runtime = "nodejs";
+
+type AIAskInput = {
+  fileName: string;
+  question: string;
+  fileText?: string;
+};
+
+type AIMode = "openai" | "gemini" | "preview";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function parseAskInput(value: unknown): GeminiAskInput | null {
+function parseAskInput(value: unknown): AIAskInput | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -29,24 +41,49 @@ function parseAskInput(value: unknown): GeminiAskInput | null {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown Gemini request error";
+  return error instanceof Error ? error.message : "Unknown AI request error";
 }
 
-function logAIStatus(args: { mode: "gemini" | "preview"; geminiSuccess: boolean; error?: unknown }) {
+function logAIStatus(args: {
+  mode: AIMode;
+  openAISuccess?: boolean;
+  geminiSuccess?: boolean;
+  openAIError?: unknown;
+  geminiError?: unknown;
+}) {
   console.info("[api/ai/ask] AI mode", { mode: args.mode });
-  console.info("[api/ai/ask] Gemini success", { success: args.geminiSuccess });
 
-  if (args.error) {
+  if (typeof args.openAISuccess === "boolean") {
+    console.info("[api/ai/ask] OpenAI success", { success: args.openAISuccess });
+  }
+
+  if (typeof args.geminiSuccess === "boolean") {
+    console.info("[api/ai/ask] Gemini success", { success: args.geminiSuccess });
+  }
+
+  if (args.openAIError) {
+    console.error("[api/ai/ask] OpenAI error", {
+      message: getErrorMessage(args.openAIError),
+    });
+  }
+
+  if (args.geminiError) {
     console.error("[api/ai/ask] Gemini error", {
-      message: getErrorMessage(args.error),
+      message: getErrorMessage(args.geminiError),
     });
   }
 }
 
 export async function POST(request: Request) {
-  let input: GeminiAskInput | null = null;
+  let input: AIAskInput | null = null;
+  const wantsOpenAI = isOpenAIProviderSelected();
+  const hasOpenAIKey = isOpenAIConfigured();
   const hasGeminiKey = isGeminiConfigured();
 
+  console.info("[api/ai/ask] AI provider", {
+    provider: wantsOpenAI ? "openai" : "gemini",
+  });
+  console.info("[api/ai/ask] hasOpenAIKey", { hasOpenAIKey });
   console.info("[api/ai/ask] hasGeminiKey", { hasGeminiKey });
 
   try {
@@ -59,17 +96,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing fileName or question" }, { status: 400 });
   }
 
-  if (!hasGeminiKey) {
-    logAIStatus({ mode: "preview", geminiSuccess: false });
-    return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
+  if (wantsOpenAI && hasOpenAIKey) {
+    try {
+      const answer = await askOpenAIQuestion(input);
+      logAIStatus({ mode: "openai", openAISuccess: true });
+      return NextResponse.json({ answer, mode: "openai" });
+    } catch (error) {
+      logAIStatus({ mode: "gemini", openAISuccess: false, openAIError: error });
+    }
   }
 
-  try {
-    const answer = await askGeminiQuestion(input);
-    logAIStatus({ mode: "gemini", geminiSuccess: true });
-    return NextResponse.json({ answer, mode: "gemini" });
-  } catch (error) {
-    logAIStatus({ mode: "preview", geminiSuccess: false, error });
-    return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
+  if (hasGeminiKey) {
+    try {
+      const answer = await askGeminiQuestion(input);
+      logAIStatus({ mode: "gemini", geminiSuccess: true });
+      return NextResponse.json({ answer, mode: "gemini" });
+    } catch (error) {
+      logAIStatus({ mode: "preview", geminiSuccess: false, geminiError: error });
+      return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
+    }
   }
+
+  logAIStatus({ mode: "preview", openAISuccess: wantsOpenAI ? false : undefined, geminiSuccess: false });
+  return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
 }
