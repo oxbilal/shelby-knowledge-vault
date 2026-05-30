@@ -34,6 +34,8 @@ type PreviewState = {
 type FileFilter = "All" | "Images" | "PDFs" | "Docs";
 
 const fileFilters: FileFilter[] = ["All", "Images", "PDFs", "Docs"];
+const readableTextExtensions = [".txt", ".md", ".json", ".csv", ".tsv", ".xml", ".html"];
+const maxSelectedFileContextLength = 12000;
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -42,6 +44,31 @@ function createId(prefix: string) {
 function hasExtension(fileName: string, extensions: string[]) {
   const normalizedName = fileName.toLowerCase();
   return extensions.some((extension) => normalizedName.endsWith(extension));
+}
+
+function hasReadableTextContext(file: Pick<ShelbyFile, "name" | "type">) {
+  const type = file.type.toLowerCase();
+
+  return (
+    type.startsWith("text/") ||
+    type.includes("json") ||
+    type.includes("xml") ||
+    type.includes("csv") ||
+    hasExtension(file.name, readableTextExtensions)
+  );
+}
+
+async function readSelectedFileContext(file: File) {
+  if (!hasReadableTextContext(file)) {
+    return undefined;
+  }
+
+  try {
+    const text = (await file.text()).trim();
+    return text ? text.slice(0, maxSelectedFileContextLength) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function matchesFileFilter(file: ShelbyFile, filter: FileFilter) {
@@ -78,6 +105,7 @@ export function VaultDashboard() {
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [aiQueries, setAiQueries] = useState(0);
   const [aiMode, setAiMode] = useState<AIMode>("Preview");
+  const [fileTextContexts, setFileTextContexts] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<PreviewState>();
 
   const selectedFile = useMemo(
@@ -148,8 +176,19 @@ export function VaultDashboard() {
     setIsUploading(true);
     try {
       const uploaded: ShelbyFile[] = [];
+      const nextContexts: Record<string, string> = {};
       for (const file of uploadFiles) {
-        uploaded.push(await uploadToShelby(file));
+        const uploadedFile = await uploadToShelby(file);
+        const context = await readSelectedFileContext(file);
+
+        uploaded.push(uploadedFile);
+        if (context) {
+          nextContexts[uploadedFile.id] = context;
+        }
+      }
+
+      if (Object.keys(nextContexts).length > 0) {
+        setFileTextContexts((current) => ({ ...current, ...nextContexts }));
       }
 
       await refreshFiles();
@@ -199,6 +238,11 @@ export function VaultDashboard() {
   async function handleDelete(file: ShelbyFile) {
     await deleteShelbyFile(file.id);
     setPreview((current) => (current?.file.id === file.id ? undefined : current));
+    setFileTextContexts((current) => {
+      const nextContexts = { ...current };
+      delete nextContexts[file.id];
+      return nextContexts;
+    });
     if (selectedFileId === file.id) {
       setMessages([]);
     }
@@ -225,7 +269,14 @@ export function VaultDashboard() {
     setIsAsking(true);
 
     try {
-      const result = await askFileQuestion(selectedFile.name, question);
+      const result = await askFileQuestion({
+        fileName: selectedFile.name,
+        fileType: selectedFile.type,
+        fileSize: selectedFile.size,
+        readCount: selectedFile.readCount,
+        question,
+        fileText: fileTextContexts[selectedFile.id],
+      });
       setAiMode(result.mode);
       const assistantMessage: ChatMessage = {
         id: createId("assistant"),

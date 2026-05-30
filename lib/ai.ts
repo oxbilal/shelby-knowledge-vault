@@ -1,7 +1,13 @@
-const AI_PREVIEW_ANSWER =
-  "Based on the selected file, this preview answer will be replaced by the real AI integration.";
-
 export type AIMode = "OpenAI" | "Gemini" | "Preview";
+
+export type AskFileQuestionInput = {
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  readCount: number;
+  question: string;
+  fileText?: string;
+};
 
 type AskAIResponse = {
   answer?: string;
@@ -16,10 +22,12 @@ function normalizeMode(mode?: string): AIMode {
   return mode === "gemini" ? "Gemini" : "Preview";
 }
 
+function createClientPreviewAnswer(input: AskFileQuestionInput) {
+  return `Preview mode. I can only use metadata for ${input.fileName}. Upload readable text or add PDF parsing to answer from file content.`;
+}
+
 export async function askFileQuestion(
-  fileName: string,
-  question: string,
-  fileText?: string,
+  input: AskFileQuestionInput,
 ): Promise<{ answer: string; mode: AIMode }> {
   try {
     const response = await fetch("/api/ai/ask", {
@@ -27,19 +35,19 @@ export async function askFileQuestion(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ fileName, question, fileText }),
+      body: JSON.stringify(input),
     });
 
     if (response.ok) {
       const payload = (await response.json()) as AskAIResponse;
       return {
-        answer: payload.answer ?? AI_PREVIEW_ANSWER,
+        answer: payload.answer ?? createClientPreviewAnswer(input),
         mode: normalizeMode(payload.mode),
       };
     }
   } catch {
-    return { answer: AI_PREVIEW_ANSWER, mode: "Preview" };
+    return { answer: createClientPreviewAnswer(input), mode: "Preview" };
   }
 
-  return { answer: AI_PREVIEW_ANSWER, mode: "Preview" };
+  return { answer: createClientPreviewAnswer(input), mode: "Preview" };
 }

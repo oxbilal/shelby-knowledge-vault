@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { createPreviewAnswer, type AIAskInput } from "@/lib/ai-grounding";
 import {
   askGeminiQuestion,
-  GEMINI_PREVIEW_ANSWER,
   isGeminiConfigured,
 } from "@/lib/gemini";
 import {
@@ -11,12 +11,6 @@ import {
 } from "@/lib/openai";
 
 export const runtime = "nodejs";
-
-type AIAskInput = {
-  fileName: string;
-  question: string;
-  fileText?: string;
-};
 
 type AIMode = "openai" | "gemini" | "preview";
 
@@ -30,6 +24,13 @@ function parseAskInput(value: unknown): AIAskInput | null {
   }
 
   const fileName = typeof value.fileName === "string" ? value.fileName.trim() : "";
+  const fileType = typeof value.fileType === "string" ? value.fileType.trim() : "Unknown";
+  const fileSize = typeof value.fileSize === "number" && Number.isFinite(value.fileSize)
+    ? Math.max(0, value.fileSize)
+    : 0;
+  const readCount = typeof value.readCount === "number" && Number.isFinite(value.readCount)
+    ? Math.max(0, value.readCount)
+    : 0;
   const question = typeof value.question === "string" ? value.question.trim() : "";
   const fileText = typeof value.fileText === "string" ? value.fileText : undefined;
 
@@ -37,7 +38,7 @@ function parseAskInput(value: unknown): AIAskInput | null {
     return null;
   }
 
-  return { fileName, question, fileText };
+  return { fileName, fileType, fileSize, readCount, question, fileText };
 }
 
 function getErrorMessage(error: unknown) {
@@ -113,10 +114,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ answer, mode: "gemini" });
     } catch (error) {
       logAIStatus({ mode: "preview", geminiSuccess: false, geminiError: error });
-      return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
+      return NextResponse.json({ answer: createPreviewAnswer(input), mode: "preview" });
     }
   }
 
   logAIStatus({ mode: "preview", openAISuccess: wantsOpenAI ? false : undefined, geminiSuccess: false });
-  return NextResponse.json({ answer: GEMINI_PREVIEW_ANSWER, mode: "preview" });
+  return NextResponse.json({ answer: createPreviewAnswer(input), mode: "preview" });
 }
