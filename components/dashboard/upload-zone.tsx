@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 type UploadZoneProps = {
   onFiles: (files: File[]) => void;
   isUploading: boolean;
+  statusMessage?: string;
 };
 
-export function UploadZone({ onFiles, isUploading }: UploadZoneProps) {
+export function UploadZone({ onFiles, isUploading, statusMessage }: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -54,7 +55,7 @@ export function UploadZone({ onFiles, isUploading }: UploadZoneProps) {
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-white">Upload files</h2>
           <p className="mt-0.5 text-sm leading-6 text-slate-400">
-            Drop files here or choose files.
+            {statusMessage ?? "Drop files here or choose files."}
           </p>
         </div>
         <Button

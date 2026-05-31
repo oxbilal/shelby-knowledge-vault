@@ -21,6 +21,7 @@ import {
   getShelbyFileUrl,
   listShelbyFiles,
   uploadToShelby,
+  type FileTextStatus,
   type ShelbyFile,
 } from "@/lib/shelby";
 import { askFileQuestion, type AIMode } from "@/lib/ai";
@@ -32,9 +33,13 @@ type PreviewState = {
 };
 
 type FileFilter = "All" | "Images" | "PDFs" | "Docs";
+type FileExtractionState = {
+  extractedText?: string;
+  textStatus: FileTextStatus;
+};
 
 const fileFilters: FileFilter[] = ["All", "Images", "PDFs", "Docs"];
-const readableTextExtensions = [".txt", ".md", ".json", ".csv", ".tsv", ".xml", ".html"];
+const readableTextExtensions = [".txt", ".md", ".csv", ".json"];
 const maxSelectedFileContextLength = 12000;
 
 function createId(prefix: string) {
@@ -58,17 +63,84 @@ function hasReadableTextContext(file: Pick<ShelbyFile, "name" | "type">) {
   );
 }
 
-async function readSelectedFileContext(file: File) {
+function isPdfFile(file: Pick<ShelbyFile, "name" | "type">) {
+  return file.type.toLowerCase().includes("pdf") || hasExtension(file.name, [".pdf"]);
+}
+
+function isOcrImage(file: Pick<ShelbyFile, "name" | "type">) {
+  const type = file.type.toLowerCase();
+
+  return (
+    ["image/png", "image/jpeg", "image/jpg"].includes(type) ||
+    hasExtension(file.name, [".png", ".jpg", ".jpeg"])
+  );
+}
+
+function getInitialTextStatus(file: File): FileTextStatus {
+  return isOcrImage(file) ? "ocr-pending" : "metadata-only";
+}
+
+function withExtraction(file: ShelbyFile, extraction?: FileExtractionState): ShelbyFile {
+  return {
+    ...file,
+    extractedText: extraction?.extractedText ?? file.extractedText,
+    textStatus: extraction?.textStatus ?? file.textStatus ?? "metadata-only",
+  };
+}
+
+async function readTextFileContext(file: File): Promise<FileExtractionState> {
   if (!hasReadableTextContext(file)) {
-    return undefined;
+    return { textStatus: "metadata-only" };
   }
 
   try {
     const text = (await file.text()).trim();
-    return text ? text.slice(0, maxSelectedFileContextLength) : undefined;
+    return text
+      ? { extractedText: text.slice(0, maxSelectedFileContextLength), textStatus: "text-ready" }
+      : { textStatus: "metadata-only" };
   } catch {
-    return undefined;
+    return { textStatus: "metadata-only" };
   }
+}
+
+async function requestServerExtraction(file: File): Promise<FileExtractionState> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await fetch("/api/files/extract-text", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (response.ok) {
+      const payload = (await response.json()) as Partial<FileExtractionState>;
+      return {
+        extractedText: payload.extractedText,
+        textStatus: payload.extractedText ? "text-ready" : "metadata-only",
+      };
+    }
+  } catch {
+    return { textStatus: "metadata-only" };
+  }
+
+  return { textStatus: "metadata-only" };
+}
+
+async function extractFileText(file: File): Promise<FileExtractionState> {
+  if (hasReadableTextContext(file)) {
+    return readTextFileContext(file);
+  }
+
+  if (isPdfFile(file) || isOcrImage(file)) {
+    return requestServerExtraction(file);
+  }
+
+  return { textStatus: "metadata-only" };
+}
+
+function mergeFile(current: ShelbyFile[], file: ShelbyFile) {
+  return [file, ...current.filter((item) => item.id !== file.id)];
 }
 
 function matchesFileFilter(file: ShelbyFile, filter: FileFilter) {
@@ -105,27 +177,33 @@ export function VaultDashboard() {
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [aiQueries, setAiQueries] = useState(0);
   const [aiMode, setAiMode] = useState<AIMode>("Preview");
-  const [fileTextContexts, setFileTextContexts] = useState<Record<string, string>>({});
+  const [fileExtraction, setFileExtraction] = useState<Record<string, FileExtractionState>>({});
+  const [extractionMessage, setExtractionMessage] = useState<string>();
   const [preview, setPreview] = useState<PreviewState>();
 
+  const filesWithExtraction = useMemo(
+    () => files.map((file) => withExtraction(file, fileExtraction[file.id])),
+    [fileExtraction, files],
+  );
+
   const selectedFile = useMemo(
-    () => files.find((file) => file.id === selectedFileId) ?? files[0],
-    [files, selectedFileId],
+    () => filesWithExtraction.find((file) => file.id === selectedFileId) ?? filesWithExtraction[0],
+    [filesWithExtraction, selectedFileId],
   );
 
   const fastReads = useMemo(
-    () => files.reduce((total, file) => total + file.readCount, 0),
-    [files],
+    () => filesWithExtraction.reduce((total, file) => total + file.readCount, 0),
+    [filesWithExtraction],
   );
 
   const filteredFiles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return files.filter((file) => {
+    return filesWithExtraction.filter((file) => {
       const matchesSearch = !query || file.name.toLowerCase().includes(query);
       return matchesSearch && matchesFileFilter(file, activeFilter);
     });
-  }, [activeFilter, files, searchQuery]);
+  }, [activeFilter, filesWithExtraction, searchQuery]);
 
   useEffect(() => {
     void refreshFiles();
@@ -174,21 +252,25 @@ export function VaultDashboard() {
 
   async function handleUpload(uploadFiles: File[]) {
     setIsUploading(true);
+    setExtractionMessage(undefined);
     try {
       const uploaded: ShelbyFile[] = [];
-      const nextContexts: Record<string, string> = {};
       for (const file of uploadFiles) {
         const uploadedFile = await uploadToShelby(file);
-        const context = await readSelectedFileContext(file);
+        const pendingFile = withExtraction(uploadedFile, {
+          textStatus: getInitialTextStatus(file),
+        });
 
-        uploaded.push(uploadedFile);
-        if (context) {
-          nextContexts[uploadedFile.id] = context;
+        uploaded.push(pendingFile);
+        setFiles((current) => mergeFile(current, pendingFile));
+
+        if (pendingFile.textStatus === "ocr-pending") {
+          setExtractionMessage("Extracting text...");
         }
-      }
 
-      if (Object.keys(nextContexts).length > 0) {
-        setFileTextContexts((current) => ({ ...current, ...nextContexts }));
+        const extraction = await extractFileText(file);
+        setFileExtraction((current) => ({ ...current, [uploadedFile.id]: extraction }));
+        setFiles((current) => mergeFile(current, withExtraction(uploadedFile, extraction)));
       }
 
       await refreshFiles();
@@ -202,6 +284,7 @@ export function VaultDashboard() {
         }),
       );
     } finally {
+      setExtractionMessage(undefined);
       setIsUploading(false);
     }
   }
@@ -238,7 +321,7 @@ export function VaultDashboard() {
   async function handleDelete(file: ShelbyFile) {
     await deleteShelbyFile(file.id);
     setPreview((current) => (current?.file.id === file.id ? undefined : current));
-    setFileTextContexts((current) => {
+    setFileExtraction((current) => {
       const nextContexts = { ...current };
       delete nextContexts[file.id];
       return nextContexts;
@@ -275,7 +358,7 @@ export function VaultDashboard() {
         fileSize: selectedFile.size,
         readCount: selectedFile.readCount,
         question,
-        fileText: fileTextContexts[selectedFile.id],
+        fileText: selectedFile.extractedText,
       });
       setAiMode(result.mode);
       const assistantMessage: ChatMessage = {
@@ -338,9 +421,13 @@ export function VaultDashboard() {
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_350px]">
           <div className="space-y-4">
-            <StatsCards filesStored={files.length} fastReads={fastReads} aiQueries={aiQueries} />
+            <StatsCards filesStored={filesWithExtraction.length} fastReads={fastReads} aiQueries={aiQueries} />
             <OnchainActivityCard />
-            <UploadZone onFiles={handleUpload} isUploading={isUploading} />
+            <UploadZone
+              onFiles={handleUpload}
+              isUploading={isUploading}
+              statusMessage={extractionMessage}
+            />
 
             <section>
               <Card className="overflow-hidden">
@@ -352,7 +439,7 @@ export function VaultDashboard() {
                     </p>
                   </div>
                   <Badge variant="outline" className="shrink-0">
-                    {filteredFiles.length}/{files.length}
+                    {filteredFiles.length}/{filesWithExtraction.length}
                   </Badge>
                 </div>
 
@@ -387,7 +474,7 @@ export function VaultDashboard() {
                 </div>
 
                 <div className="max-h-[460px] overflow-y-auto p-3 sm:p-4 lg:max-h-[520px]">
-                  {files.length === 0 ? (
+                  {filesWithExtraction.length === 0 ? (
                     <div className="rounded-lg border border-white/10 bg-white/[0.04] p-8 text-center">
                       <FileText className="mx-auto size-9 text-slate-600" />
                       <p className="mt-3 text-sm font-medium text-white">No files</p>

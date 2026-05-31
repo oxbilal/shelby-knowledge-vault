@@ -24,6 +24,18 @@ function getFileIcon(type: string) {
   return FileText;
 }
 
+function getTextStatusLabel(file: ShelbyFile) {
+  if (file.textStatus === "text-ready") {
+    return "Text ready";
+  }
+
+  if (file.textStatus === "ocr-pending") {
+    return "OCR pending";
+  }
+
+  return "Metadata only";
+}
+
 export function FileCard({
   file,
   isSelected,
@@ -58,6 +70,19 @@ export function FileCard({
           className={cn("shrink-0 px-2 py-0.5", isSelected && "bg-primary/15")}
         >
           {isSelected ? "Selected" : "Stored"}
+        </Badge>
+      </div>
+
+      <div className="mt-2 flex justify-end">
+        <Badge
+          variant="outline"
+          className={cn(
+            "px-2 py-0.5 text-[11px]",
+            file.textStatus === "text-ready" && "border-emerald-400/25 text-emerald-200",
+            file.textStatus === "ocr-pending" && "border-secondary/25 text-secondary",
+          )}
+        >
+          {getTextStatusLabel(file)}
         </Badge>
       </div>
 

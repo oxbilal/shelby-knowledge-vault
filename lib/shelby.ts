@@ -1,3 +1,5 @@
+export type FileTextStatus = "text-ready" | "metadata-only" | "ocr-pending";
+
 export type ShelbyFile = {
   id: string;
   name: string;
@@ -7,6 +9,8 @@ export type ShelbyFile = {
   storageMode: "Shelby hot storage";
   readCount: number;
   dataUrl: string;
+  extractedText?: string;
+  textStatus?: FileTextStatus;
 };
 
 const SHELBY_STORAGE_KEY = "shelby-knowledge-vault-files";
